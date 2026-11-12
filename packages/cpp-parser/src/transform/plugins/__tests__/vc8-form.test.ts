@@ -22,7 +22,11 @@ describe('vc8-form: parsing', () => {
   it('reads each op and its arguments', () => {
     assert.deepStrictEqual(parseVc8Form('seq(a.x,a.y)'), { op: 'seq', targets: ['a.x', 'a.y'] });
     assert.deepStrictEqual(parseVc8Form('cache(p->q[f(a, b)],n,T*,@x)'), { op: 'cache', expr: 'p->q[f(a, b)]', name: 'n', type: 'T*', anchor: 'x' });
+    assert.deepStrictEqual(parseVc8Form('cache(&pThis->tSlotListArray,pArray,TSGrowableArray<TSExplicitList<SGAMEDATA, -572662307>>*,@call)'),
+      { op: 'cache', expr: '&pThis->tSlotListArray', name: 'pArray', type: 'TSGrowableArray<TSExplicitList<SGAMEDATA, -572662307>>*', anchor: 'call' });
     assert.deepStrictEqual(parseVc8Form('cache(g,p)'), { op: 'cache', expr: 'g', name: 'p' });
+    assert.deepStrictEqual(parseVc8Form('cache(p->x < 4 ? p->y : p->z,n,int)'),
+      { op: 'cache', expr: 'p->x < 4 ? p->y : p->z', name: 'n', type: 'int', anchor: undefined });
     assert.deepStrictEqual(parseVc8Form('guards(2)'), { op: 'guards', split: 2, index: 1 });
     assert.deepStrictEqual(parseVc8Form('own(v,DWORD,nBytes)'), { op: 'own', name: 'v', type: 'DWORD', rename: 'nBytes' });
   });
@@ -31,6 +35,7 @@ describe('vc8-form: parsing', () => {
     assert.strictEqual(parseVc8Form('fold(a,b)'), undefined);
     assert.strictEqual(parseVc8Form('seq(a)'), undefined);
     assert.strictEqual(parseVc8Form('guards(x)'), undefined);
+    assert.strictEqual(parseVc8Form('cache(x,y,int,bad)'), undefined);
   });
 });
 
@@ -206,6 +211,42 @@ describe('vc8-form: fold', () => {
 });
 
 describe('vc8-form: cache', () => {
+  it('anchors an address cache before its unique member call with a template-comma type', () => {
+    const form = 'cache(&pThis->tSlotListArray,pArray,TSGrowableArray<TSExplicitList<SGAMEDATA, -572662307>>*,@call)';
+    const { out, sites } = run([
+      'void f(H* pThis) {',
+      '  pThis->InternalClear(1);',
+      '  pThis->tSlotListArray.Destructor();',
+      '  pThis->tSlotListArray.m_alloc = 0;',
+      '  pThis->tSlotListArray.m_count = 0;',
+      '}',
+    ], form);
+    assert.ok(sites[0].applied, sites[0].why);
+    assert.ok(out.includes('pThis->InternalClear(1); TSGrowableArray<TSExplicitList<SGAMEDATA, -572662307>>* pArray = &pThis->tSlotListArray; pArray->Destructor(); pArray->m_alloc = 0; pArray->m_count = 0;'), out);
+  });
+  it('anchors the equivalent static call that passes the member address', () => {
+    const { out, sites } = run(['void f(H* pThis) {', '  TSGrowableArray<TSExplicitList<SGAMEDATA, -572662307>>::Destructor(&pThis->tSlotListArray);', '  pThis->tSlotListArray.m_alloc = 0;', '}'],
+      'cache(&pThis->tSlotListArray,pArray,TSGrowableArray<TSExplicitList<SGAMEDATA, -572662307>>*,@call)');
+    assert.ok(sites[0].applied, sites[0].why);
+    assert.match(out, /pArray = &pThis->tSlotListArray; TSGrowableArray<.*>::Destructor\(.*pArray.*\); pArray->m_alloc = 0/);
+  });
+  it('refuses @call when no call reads the member address', () => {
+    const { sites } = run(['void f(H* pThis) {', '  g();', '  pThis->tSlotListArray.m_alloc = 0;', '}'],
+      'cache(&pThis->tSlotListArray,pArray,TSGrowableArray<TSExplicitList<SGAMEDATA, -572662307>>*,@call)');
+    assert.strictEqual(sites[0].applied, false);
+    assert.match(sites[0].why ?? '', /found 0/);
+  });
+  it('refuses @call when two calls read the same member address', () => {
+    const { sites } = run(['void f(H* pThis) {', '  g(&pThis->tSlotListArray);', '  h(&pThis->tSlotListArray);', '}'],
+      'cache(&pThis->tSlotListArray,pArray,TSGrowableArray<TSExplicitList<SGAMEDATA, -572662307>>*,@call)');
+    assert.strictEqual(sites[0].applied, false);
+    assert.match(sites[0].why ?? '', /found 2/);
+  });
+  it('refuses moving a side-effecting expression ahead of a call', () => {
+    const { sites } = run(['void f() {', '  g();', '  h(f());', '}'], 'cache(f(),x,int,@call)');
+    assert.strictEqual(sites[0].applied, false);
+    assert.match(sites[0].why ?? '', /pure address of a member/);
+  });
   // Q33_KillAnyaMonsterTimer 00589540: the quest-specific pointer in a local of its own.
   it('hoists a new local before the first statement that reads it', () => {
     const { out, sites } = run([
@@ -461,6 +502,48 @@ describe('vc8-form: width', () => {
     ], 'width(b,int)');
     assert.ok(sites[0].applied, sites[0].why);
     assert.ok(out.startsWith('void f(int c) { int b; b = false;'), out);
+  });
+  // SPELLSEL_DrawTabHighlight 004ab310: the original keeps the hover flags in 32-bit slots.
+  it('widens a bool to BOOL whose stores are comparisons and literals', () => {
+    const { out, sites } = run([
+      'void f(int y, int lo) {', '  bool b;', '  b = false;', '  if (y >= lo) {', '    b = y < lo + 4;', '  }', '  if (!b) {', '    return;', '  }', '  g();', '}',
+    ], 'width(b,BOOL)');
+    assert.ok(sites[0].applied, sites[0].why);
+    assert.strictEqual(out, 'void f(int y, int lo) { BOOL b; b = false; if (y >= lo) { b = y < lo + 4; } if (!b) { return; } g(); }');
+  });
+  it('widens a bool stored any value when every read is a truth test', () => {
+    const { out, sites } = run(['void f(int n) {', '  bool b;', '  b = n;', '  if (b && n != 3) {', '    g();', '  }', '}'], 'width(b,BOOL)');
+    assert.ok(sites[0].applied, sites[0].why);
+    assert.strictEqual(out, 'void f(int n) { BOOL b; b = n; if (b && n != 3) { g(); } }');
+  });
+  // A bool normalises a store to 0/1, so its low byte is not the stored value's.
+  it('refuses a bool widened when a store can exceed 0/1 and a read keeps the byte', () => {
+    const src = ['void f(int n) {', '  bool b;', '  b = n;', '  Send((uint8_t)b);', '}'];
+    const { out, sites } = run(src, 'width(b,BOOL)');
+    assert.strictEqual(sites[0].applied, false);
+    assert.match(sites[0].why!, /reads more than whether it is zero/);
+    assert.strictEqual(out, flat(src.join(' ')));
+  });
+  it('refuses a bool widened from a float, which truncates to zero as an int', () => {
+    const { sites } = run(['void f(float x) {', '  bool b;', '  b = x;', '  if (b) {', '    g();', '  }', '}'], 'width(b,BOOL)');
+    assert.strictEqual(sites[0].applied, false);
+    assert.match(sites[0].why!, /no 32-bit integer or pointer/);
+  });
+  it('refuses a bool widened and read as a value after any store', () => {
+    const { sites } = run(['int f(int n) {', '  bool b;', '  b = n;', '  return b + 1;', '}'], 'width(b,BOOL)');
+    assert.strictEqual(sites[0].applied, false);
+  });
+  it('refuses a narrowing to bool whose read keeps the low byte', () => {
+    const { sites } = run(['void f() {', '  int n;', '  n = Read();', '  if ((uint8_t)n != 0) {', '    g();', '  }', '}'], 'width(n,bool)');
+    assert.strictEqual(sites[0].applied, false);
+  });
+  // SStrTokenize 00413b80: a char the original holds in EBX (`xor ebx,ebx` before the byte load).
+  it('widens a char whose stores fit and whose reads are compares', () => {
+    const { out, sites } = run([
+      'void f(char k, char e) {', '  char c;', '  c = k;', '  while (c != e) {', '    c = e;', '  }', '}',
+    ], 'width(c,int)');
+    assert.ok(sites[0].applied, sites[0].why);
+    assert.strictEqual(out, 'void f(char k, char e) { int c; c = k; while (c != e) { c = e; } }');
   });
   it('keeps a widening whose stores come from locals of the old type', () => {
     const { sites } = run(['int f(uint16_t a) {', '  uint16_t w;', '  w = a;', '  return w;', '}'], 'width(w,uint32_t)');
@@ -1045,18 +1128,12 @@ describe('vc8-form: opas', () => {
     '  }',
     '}',
   ];
-  const PAIR = [
-    'void dummy(Path* pDynamicPath, int32_t nX, int32_t nY) {',
-    '  DRLG_WorldToScreenNoShift(&nX, &nY);',
-    '  pDynamicPath->nTargetX = (short int)(nX >> 0xb);',
-    '  pDynamicPath->nTargetY = (short int)(nY >> 0xb);',
-    '}',
-  ];
   it('parses only named, literal, nonduplicated updates', () => {
     assert.deepStrictEqual(parseVc8Form('opas(nSelectedLine,+,1)'), { op: 'opas', updates: [{ name: 'nSelectedLine', operator: '+', constant: '1' }] });
-    assert.deepStrictEqual(parseVc8Form('opas(nX,>>,0xb,nY,>>,0xb)'), { op: 'opas', updates: [
-      { name: 'nX', operator: '>>', constant: '0xb' }, { name: 'nY', operator: '>>', constant: '0xb' },
+    assert.deepStrictEqual(parseVc8Form('opas(nX,>>,0xb)'), { op: 'opas', updates: [
+      { name: 'nX', operator: '>>', constant: '0xb' },
     ] });
+    assert.strictEqual(parseVc8Form('opas(nX,>>,0xb,nY,>>,0xb)'), undefined);
     assert.strictEqual(parseVc8Form('opas(nX,>>,0xb,nX,>>,0xb)'), undefined);
     assert.strictEqual(parseVc8Form('opas(nX,>>,f())'), undefined);
     assert.strictEqual(parseVc8Form('opas(nX,>>,0xb,@site)'), undefined);
@@ -1067,6 +1144,21 @@ describe('vc8-form: opas', () => {
     assert.ok(sites[0].applied, sites[0].why);
     assert.notStrictEqual(out, plain.out);
     assert.match(out, /if \(nSelectedLine != -1\) \{ char\* pszRealmName; nSelectedLine \+= 1; SetCurGateway\(pGatewayAccess, nSelectedLine\); pszRealmName = Realm\(pGatewayAccess, nSelectedLine\);/);
+  });
+  it('refuses a backward jump that can repeat the guard with the updated value', () => {
+    const source = [
+      'void f() {',
+      '  int32_t v = Get();',
+      'again: m();',
+      '  if (v != -1) { g(v + 1); h(v + 1); }',
+      '  if (k()) goto again;',
+      '}',
+    ];
+    const plain = run(source);
+    const tagged = run(source, 'opas(v,+,1)');
+    assert.equal(tagged.sites[0].applied, false);
+    assert.match(tagged.sites[0].why!, /jump/);
+    assert.equal(tagged.out, plain.out);
   });
   it('narrows a guarded byte update before both uses', () => {
     const { out, sites } = run(BYTE, 'opas(byMinGrp,-,1)');
@@ -1111,11 +1203,6 @@ describe('vc8-form: opas', () => {
       assert.strictEqual(tagged.out, plain.out, source.join('\n'));
     }
   });
-  it('writes paired shifts in order before either store', () => {
-    const { out, sites } = run(PAIR, 'opas(nX,>>,0xb,nY,>>,0xb)');
-    assert.ok(sites[0].applied, sites[0].why);
-    assert.match(out, /DRLG_WorldToScreenNoShift\(&nX, &nY\); nX >>= 0xb; nY >>= 0xb; pDynamicPath->nTargetX = \(short int\)nX; pDynamicPath->nTargetY = \(short int\)nY;/);
-  });
   it('keeps untagged source and stale tagged source unchanged', () => {
     const untagged = run(PLUS);
     assert.deepStrictEqual(untagged.sites, []);
@@ -1125,10 +1212,6 @@ describe('vc8-form: opas', () => {
     const staleTagged = run(staleInput, 'opas(nSelectedLine,+,1)');
     assert.strictEqual(staleTagged.sites[0].applied, false);
     assert.strictEqual(staleTagged.out, stalePlain.out);
-    const pairPlain = run(PAIR.map(l => l.replace('(&nX, &nY)', '(&nY, &nX)')));
-    const pairStale = run(PAIR.map(l => l.replace('(&nX, &nY)', '(&nY, &nX)')), 'opas(nX,>>,0xb,nY,>>,0xb)');
-    assert.strictEqual(pairStale.sites[0].applied, false);
-    assert.strictEqual(pairStale.out, pairPlain.out);
   });
   it('refuses shadowed bindings, stale reads, impure operands and crossing a call', () => {
     const shadow = run(PLUS.map(l => l.replace('char* pszRealmName;', 'int32_t nSelectedLine = 0; char* pszRealmName;')), 'opas(nSelectedLine,+,1)');
@@ -1179,16 +1262,5 @@ describe('vc8-form: opas', () => {
     assert.match(cast.sites[0].why!, /0 adjacent/);
     const guard = run(BYTE.map(l => l.replace('if (byMinGrp && byMaxGrp && byMaxGrp >= byMinGrp)', 'if (byMaxGrp >= byMinGrp)')), 'opas(byMinGrp,-,1)');
     assert.match(guard.sites[0].why!, /nonzero guard/);
-  });
-  it('refuses a lone shift, reversed address call and extra control flow', () => {
-    const lone = run(PAIR, 'opas(nX,>>,0xb)');
-    assert.match(lone.sites[0].why!, /single opas/);
-    const reverse = run(PAIR.map(l => l.replace('(&nX, &nY)', '(&nY, &nX)')), 'opas(nX,>>,0xb,nY,>>,0xb)');
-    assert.match(reverse.sites[0].why!, /both addresses in order/);
-    const branch = run(PAIR.map(l => l.replace('pDynamicPath->nTargetX', 'if (nX) return; pDynamicPath->nTargetX')), 'opas(nX,>>,0xb,nY,>>,0xb)');
-    assert.match(branch.sites[0].why!, /one call and precede two stores/);
-    const twoTargets = run(PAIR.map(l => l.replace('Path* pDynamicPath,', 'Path* pDynamicPath, Path* pOther,')
-      .replace('pDynamicPath->nTargetY', 'pOther->nTargetY')), 'opas(nX,>>,0xb,nY,>>,0xb)');
-    assert.match(twoTargets.sites[0].why!, /one pointer parameter/);
   });
 });

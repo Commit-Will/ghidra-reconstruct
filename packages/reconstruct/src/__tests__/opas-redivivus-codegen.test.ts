@@ -1,14 +1,16 @@
 /**
  * Redivivus Windows 1.14d functions, read from Ghidra at the addresses below.
- * Exercise measured vc8form tags through generateProject, including the
+ * Live function facts refreshed on 2026-11-12. Exercise vc8form tags through generateProject, including the
  * decompile-hash gate, parser, transform, and emitted implementation.
  */
 import { describe, it } from 'node:test';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 
 import { generateProject } from '../codegen/index.js';
 import { vc8formBodyHash } from '../codegen/vc8form-spec.js';
-import type { ExtractedFunction, ExtractedNamespace, ProgramInfo, ReconstructOptions } from '../types.js';
+import type { ExtractedFunction, ExtractedNamespace, ExtractedStruct, ProgramInfo, ReconstructOptions } from '../types.js';
 
 const options: ReconstructOptions = {
   outputDir: './out', format: 'cpp', organization: 'namespace',
@@ -23,109 +25,37 @@ const programInfo: ProgramInfo = {
 
 type Case = {
   address: string; name: string; namespace: string; size: number;
-  returnType: string; parameters: Array<[string, string]>; locals: Array<[string, string]>;
-  form: string; decompiled: string;
+  forms: string[];
 };
 
 const cases: Case[] = [
   {
     address: '00434700', name: 'StorePreferedRealmAgain', namespace: 'D2Launch::MainMenus', size: 90,
-    returnType: 'BOOL', parameters: [['pControlMsg', 'D2ControlMsg *']],
-    locals: [['pGatewayAccess', 'D2BNetGatewayAccessStr *'], ['nSelectedLine', 'int32_t'], ['pszRealmName', 'char *']],
-    form: 'opas(nSelectedLine,+,1)',
-    decompiled: `BOOL D2Launch::MainMenus::StorePreferedRealmAgain(D2ControlMsg *pControlMsg)
-{
-  D2BNetGatewayAccessStr *pGatewayAccess;
-  int32_t nSelectedLine;
-  char *pszRealmName;
-  pGatewayAccess = (*D2Launch::Launcher::gpBNetCallbacks->pfnBnetLoadAndReturn)();
-  nSelectedLine = D2Win::Src::D2WinTextBox::D2WINTEXTBOX_GetSelectedLine(gpMainMenuGatewayListTextBox);
-  if (nSelectedLine != -1) {
-    Bnclient::BNGatewayAccess::SetCurGateway(pGatewayAccess,nSelectedLine + 1);
-    pszRealmName = Bnclient::BNGatewayAccess::Realm(pGatewayAccess,nSelectedLine + 1);
-    Storm::Source::SReg::SRegSaveString("Diablo II","Preferred Realm",0,pszRealmName);
-  }
-  D2Launch::MainMenus::FORMS_DestroyLists();
-  D2Launch::MainMenus::UIMENU_MainMenu();
-  return 1;
-}`,
+    forms: ['opas(nSelectedLine,+,1)'],
   },
   {
     address: '0054e090', name: 'MONSTER_SpawnMonsterGroup', namespace: 'D2Game::Monsters::Monsters::Spawn', size: 241,
-    returnType: 'D2UnitStrc *', parameters: [
-      ['pGame', 'SGAMEDATA *'], ['pRoom', 'D2RoomStrc *'], ['nClassId', 'int32_t'], ['nX', 'int32_t'], ['nY', 'int32_t'],
-    ],
-    locals: [
-      ['pMonStatLine', 'D2MonStatsTxt *'], ['pCoordList', 'D2RoomCoordListStrc *'], ['pUnit', 'D2UnitStrc *'],
-      ['nMinionCount', 'uint32_t'], ['nMinionIdx', 'int32_t'], ['byMinGrp', 'byte'], ['byMaxGrp', 'byte'],
-    ],
-    form: 'opas(byMinGrp,-,1)',
-    decompiled: `D2UnitStrc * D2Game::Monsters::Monsters::Spawn::MONSTER_SpawnMonsterGroup(SGAMEDATA *pGame,D2RoomStrc *pRoom,int32_t nClassId,int32_t nX,int32_t nY)
-{
-  D2MonStatsTxt *pMonStatLine;
-  D2RoomCoordListStrc *pCoordList;
-  D2UnitStrc *pUnit;
-  uint32_t nMinionCount;
-  int32_t nMinionIdx;
-  byte byMinGrp;
-  byte byMaxGrp;
-  if ((nClassId < 0) || (D2Common::ITEMS::Items::sgptDataTable->nTxtMonStatsSize <= nClassId)) {
-    pMonStatLine = (D2MonStatsTxt *)0x0;
-  }
-  else {
-    pMonStatLine = D2Common::ITEMS::Items::sgptDataTable->pTxtMonStats + nClassId;
-  }
-  byMinGrp = pMonStatLine->MinGrp;
-  byMaxGrp = pMonStatLine->MaxGrp;
-  if (((byMinGrp != 0) && (byMaxGrp != 0)) && (byMinGrp <= byMaxGrp)) {
-    pCoordList = D2Common::DUNGEON::Dungeon::DRLGROOM_GetCoordListFromSubtilePos(pRoom,nX,nY);
-    if ((pCoordList != (D2RoomCoordListStrc *)0x0) &&
-       (pUnit = D2Game::Monster::Monster::Create::SpawnMonsterInRoomCoordList
-                          (pGame,pRoom,pCoordList,nX,nY,nClassId,Neutral,-1,0),
-       pUnit != (D2UnitStrc *)0x0)) {
-      nMinionCount = D2Common::Seed::RANDOM_RandomNumberSelector
-                               (&pUnit->sSeed,
-                                ((uint)(byte)(byMaxGrp - 1) - (uint)(byte)(byMinGrp - 1)) + 1);
-      for (nMinionIdx = nMinionCount + (byte)(byMinGrp - 1); 0 < nMinionIdx;
-          nMinionIdx = nMinionIdx + -1) {
-        D2Game::Monster::Monster::Create::SpawnMonsterAtCoordList
-                  (pGame,pCoordList,pUnit,nClassId,Neutral,3,0);
-      }
-      return pUnit;
-    }
-    return (D2UnitStrc *)0x0;
-  }
-  return (D2UnitStrc *)0x0;
-}`,
+    forms: ['opas(byMinGrp,-,1)'],
   },
   {
     address: '00648b00', name: 'SetSP1Shifted', namespace: 'D2Common::PATH::DynamicPath', size: 43,
-    returnType: 'void', parameters: [
-      ['pDynamicPath', 'D2DynamicPathStrc *'], ['nX', 'int32_t'], ['nY', 'int32_t'],
-    ], locals: [], form: 'opas(nX,>>,0xb,nY,>>,0xb)',
-    decompiled: `void D2Common::PATH::DynamicPath::SetSP1Shifted(D2DynamicPathStrc *pDynamicPath,int32_t nX,int32_t nY)
-{
-  D2Common::Drlg::Drlg::Transform::DRLG_WorldToScreenNoShift(&nX,&nY);
-  pDynamicPath->nTargetX = (short)(nX >> 0xb);
-  pDynamicPath->nTargetY = (short)(nY >> 0xb);
-  return;
-}`,
+    forms: ['opas(nX,>>,0xb)', 'opas(nY,>>,0xb)'],
   },
 ];
 
+const live = JSON.parse(readFileSync(new URL('./fixtures/opas-live-20261112.json', import.meta.url), 'utf8')) as Record<string, ExtractedFunction>;
+
 function extract(c: Case, tag: 'current' | 'stale' | 'none'): ExtractedFunction {
-  const params = c.parameters.map(([name, dataType], ordinal) => ({ name, dataType, size: 4, ordinal }));
+  const facts = live[c.address];
+  const decompiled = facts.decompiled!;
   return {
-    name: c.name, address: c.address, namespace: c.namespace, size: c.size,
-    signature: `${c.returnType} ${c.name}(${c.parameters.map(([name, type]) => `${type} ${name}`).join(', ')})`,
-    returnType: c.returnType, parameters: params,
-    localVariables: c.locals.map(([name, dataType]) => ({ name, dataType, size: dataType === 'byte' ? 1 : 4, storage: 'EAX:4' })),
-    callingConvention: '__stdcall', isThunk: false, isExternal: false, hasVarArgs: false,
-    decompiled: c.decompiled, calledFunctions: [],
-    tags: tag === 'none' ? [] : [{
+    ...facts, address: c.address,
+    decompiled, calledFunctions: [],
+    tags: tag === 'none' ? [] : c.forms.map((form, index) => ({
       type: 'vc8form',
-      data: `${c.form};ev=0123456789;bh=${c.size}-00000000;dh=${tag === 'current' ? vc8formBodyHash(c.decompiled) : '00000000'}`,
-    }],
+      // Evidence/byte tokens are fixture placeholders, never installable live tags.
+      data: `${form};ev=0123456789;bh=${c.size}-00000000;dh=${tag === 'current' ? vc8formBodyHash(decompiled) : '00000000'}${c.forms.length > 1 ? `;ord=${index + 1}` : ''}`,
+    })),
   };
 }
 
@@ -134,12 +64,16 @@ function implementations(tag: 'current' | 'stale' | 'none'): Map<string, string>
   const namespaces: ExtractedNamespace[] = cases.map(c => ({
     name: c.namespace.split('::').at(-1)!, fullPath: c.namespace, functionCount: 1, isClass: false,
   }));
-  const project = generateProject('opas-redivivus', functions, [], [], [], namespaces, options, programInfo);
+  const types: ExtractedStruct[] = [{ kind: 'STRUCTURE', name: 'D2DynamicPathStrc', category: '/', size: 512,
+    fields: [{ name: 'nTargetX', dataType: 'short', offset: 16, size: 2 },
+      { name: 'nTargetY', dataType: 'short', offset: 18, size: 2 }] }];
+  const project = generateProject('opas-redivivus', functions, [], types, [], namespaces, options, programInfo);
   const byFunction = new Map<string, string>();
   for (const c of cases) {
     const file = [...project.files.values()].find(f => f.type === 'implementation' && f.content.includes(`${c.name}(`));
     assert.ok(file, `implementation for ${c.address} ${c.name}`);
     byFunction.set(c.name, file.content);
+    if (process.env.OPAS_EMIT_DIR) writeFileSync(join(process.env.OPAS_EMIT_DIR, `${tag}-${c.address}.cpp`), file.content);
   }
   return byFunction;
 }

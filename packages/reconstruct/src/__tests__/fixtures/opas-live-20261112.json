@@ -1,0 +1,226 @@
+{
+  "00434700": {
+    "name": "StorePreferedRealmAgain",
+    "signature": "BOOL StorePreferedRealmAgain(D2ControlMsg * pControlMsg)",
+    "returnType": "BOOL",
+    "callingConvention": "__stdcall",
+    "size": 90,
+    "namespace": "D2Launch::MainMenus",
+    "hasVarArgs": false,
+    "isThunk": false,
+    "isExternal": false,
+    "parameters": [
+      {
+        "name": "pControlMsg",
+        "dataType": "D2ControlMsg *",
+        "size": 4,
+        "ordinal": 0,
+        "storage": "Stack[0x4]:4",
+        "stackOffset": 4,
+        "resolvedType": null
+      }
+    ],
+    "localVariables": [
+      {
+        "name": "pGatewayAccess",
+        "dataType": "undefined4",
+        "size": 4,
+        "storage": "EAX:4",
+        "stackOffset": null,
+        "resolvedType": "D2BNetGatewayAccessStr *"
+      },
+      {
+        "name": "nSelectedLine",
+        "dataType": "undefined4",
+        "size": 4,
+        "storage": "EAX:4",
+        "stackOffset": null,
+        "resolvedType": "int32_t"
+      },
+      {
+        "name": "pszRealmName",
+        "dataType": "undefined4",
+        "size": 4,
+        "storage": "EAX:4",
+        "stackOffset": null,
+        "resolvedType": "char *"
+      }
+    ],
+    "decompiled": "\n/* @function StorePreferedRealmAgain\n   @address Game.exe.ram:00434700\n   @date 2026.06.06\n   @calling __stdcall\n   @description Diablo 2 1.14d reverse team\n   https://blizzhackers.dev */\n\nBOOL D2Launch::MainMenus::StorePreferedRealmAgain(D2ControlMsg *pControlMsg)\n\n{\n  D2BNetGatewayAccessStr *pGatewayAccess;\n  int32_t nSelectedLine;\n  char *pszRealmName;\n  \n  pGatewayAccess = (*D2Launch::Launcher::gpBNetCallbacks->pfnBnetLoadAndReturn)();\n  nSelectedLine =\n       D2Win::Src::D2WinTextBox::D2WINTEXTBOX_GetSelectedLine(gpMainMenuGatewayListTextBox);\n  if (nSelectedLine != -1) {\n    Bnclient::BNGatewayAccess::SetCurGateway(pGatewayAccess,nSelectedLine + 1);\n    pszRealmName = Bnclient::BNGatewayAccess::Realm(pGatewayAccess,nSelectedLine + 1);\n    Storm::Source::SReg::SRegSaveString(\"Diablo II\",\"Preferred Realm\",0,pszRealmName);\n  }\n  D2Launch::MainMenus::FORMS_DestroyLists();\n  D2Launch::MainMenus::UIMENU_MainMenu();\n  return 1;\n}\n\n"
+  },
+  "0054e090": {
+    "name": "MONSTER_SpawnMonsterGroup",
+    "signature": "D2UnitStrc * MONSTER_SpawnMonsterGroup(SGAMEDATA * pGame, D2RoomStrc * pRoom, int32_t nClassId, int32_t nX, int32_t nY)",
+    "returnType": "D2UnitStrc *",
+    "callingConvention": "__stdcall",
+    "size": 241,
+    "namespace": "D2Game::Monsters::Monsters::Spawn",
+    "hasVarArgs": false,
+    "isThunk": false,
+    "isExternal": false,
+    "parameters": [
+      {
+        "name": "pGame",
+        "dataType": "SGAMEDATA *",
+        "size": 4,
+        "ordinal": 0,
+        "storage": "Stack[0x4]:4",
+        "stackOffset": 4,
+        "resolvedType": null
+      },
+      {
+        "name": "pRoom",
+        "dataType": "D2RoomStrc *",
+        "size": 4,
+        "ordinal": 1,
+        "storage": "Stack[0x8]:4",
+        "stackOffset": 8,
+        "resolvedType": null
+      },
+      {
+        "name": "nClassId",
+        "dataType": "int32_t",
+        "size": 4,
+        "ordinal": 2,
+        "storage": "Stack[0xc]:4",
+        "stackOffset": 12,
+        "resolvedType": null
+      },
+      {
+        "name": "nX",
+        "dataType": "int32_t",
+        "size": 4,
+        "ordinal": 3,
+        "storage": "Stack[0x10]:4",
+        "stackOffset": 16,
+        "resolvedType": null
+      },
+      {
+        "name": "nY",
+        "dataType": "int32_t",
+        "size": 4,
+        "ordinal": 4,
+        "storage": "EAX:4",
+        "stackOffset": null,
+        "resolvedType": null
+      }
+    ],
+    "localVariables": [
+      {
+        "name": "pMonStatLine",
+        "dataType": "undefined4",
+        "size": 4,
+        "storage": "EAX:4",
+        "stackOffset": null,
+        "resolvedType": "D2MonStatsTxt *"
+      },
+      {
+        "name": "pCoordList",
+        "dataType": "undefined4",
+        "size": 4,
+        "storage": "EAX:4",
+        "stackOffset": null,
+        "resolvedType": "D2RoomCoordListStrc *"
+      },
+      {
+        "name": "pUnit",
+        "dataType": "undefined4",
+        "size": 4,
+        "storage": "EAX:4",
+        "stackOffset": null,
+        "resolvedType": "D2UnitStrc *"
+      },
+      {
+        "name": "nMinionCount",
+        "dataType": "uint32_t",
+        "size": 4,
+        "storage": "EAX:4",
+        "stackOffset": null,
+        "resolvedType": null
+      },
+      {
+        "name": "nMinionIdx",
+        "dataType": "int32_t",
+        "size": 4,
+        "storage": "ESI:4",
+        "stackOffset": null,
+        "resolvedType": null
+      },
+      {
+        "name": "local_5",
+        "dataType": "undefined1",
+        "size": 1,
+        "storage": "Stack[-0x5]:1",
+        "stackOffset": -5,
+        "resolvedType": null
+      },
+      {
+        "name": "local_6",
+        "dataType": "undefined1",
+        "size": 1,
+        "storage": "Stack[-0x6]:1",
+        "stackOffset": -6,
+        "resolvedType": null
+      },
+      {
+        "name": "byMinGrp",
+        "dataType": "byte",
+        "size": 1,
+        "storage": "HASH:5fa194634b:1",
+        "stackOffset": null,
+        "resolvedType": null
+      },
+      {
+        "name": "byMaxGrp",
+        "dataType": "byte",
+        "size": 1,
+        "storage": "HASH:5fdcd7d8c1:1",
+        "stackOffset": null,
+        "resolvedType": null
+      }
+    ],
+    "decompiled": "\n/* WARNING: Enum \"eCollisionFlags\": Some values do not have unique names */\n/* WARNING: Enum \"eD2TimerType\": Some values do not have unique names */\n/* WARNING: Enum \"eD2TimerTypeDWORD\": Some values do not have unique names */\n/* @function MONSTER_SpawnMonsterGroup\n   @address Game.exe.ram:0054e090\n   @date 2026.06.13\n   @params\n     pGame: Stack[0x4]:4 (SGAMEDATA *)\n     pRoom: Stack[0x8]:4 (D2RoomStrc *)\n     nClassId: Stack[0xc]:4 (int32_t)\n     nX: Stack[0x10]:4 (int32_t)\n     nY: EAX:4 (int32_t)\n   @description Diablo 2 1.14d reverse team\n   https://blizzhackers.dev\n           \n   @Date: 2022.08.02\n   @Author: dzik\n   @Function: MONSTER_SpawnMonsterGroup\n   @Address: Game.0x0054e090 */\n\nD2UnitStrc *\nD2Game::Monsters::Monsters::Spawn::MONSTER_SpawnMonsterGroup\n          (SGAMEDATA *pGame,D2RoomStrc *pRoom,int32_t nClassId,int32_t nX,int32_t nY)\n\n{\n  D2MonStatsTxt *pMonStatLine;\n  D2RoomCoordListStrc *pCoordList;\n  D2UnitStrc *pUnit;\n  uint32_t nMinionCount;\n  int32_t nMinionIdx;\n  byte byMinGrp;\n  byte byMaxGrp;\n  \n  if ((nClassId < 0) || (D2Common::ITEMS::Items::sgptDataTable->nTxtMonStatsSize <= nClassId)) {\n    pMonStatLine = (D2MonStatsTxt *)0x0;\n  }\n  else {\n    pMonStatLine = D2Common::ITEMS::Items::sgptDataTable->pTxtMonStats + nClassId;\n  }\n  byMinGrp = pMonStatLine->MinGrp;\n  byMaxGrp = pMonStatLine->MaxGrp;\n  if (((byMinGrp != 0) && (byMaxGrp != 0)) && (byMinGrp <= byMaxGrp)) {\n    pCoordList = D2Common::DUNGEON::Dungeon::DRLGROOM_GetCoordListFromSubtilePos(pRoom,nX,nY);\n    if ((pCoordList != (D2RoomCoordListStrc *)0x0) &&\n       (pUnit = D2Game::Monster::Monster::Create::SpawnMonsterInRoomCoordList\n                          (pGame,pRoom,pCoordList,nX,nY,nClassId,Neutral,-1,0),\n       pUnit != (D2UnitStrc *)0x0)) {\n      nMinionCount = D2Common::Seed::RANDOM_RandomNumberSelector\n                               (&pUnit->sSeed,\n                                ((uint)(byte)(byMaxGrp - 1) - (uint)(byte)(byMinGrp - 1)) + 1);\n      for (nMinionIdx = nMinionCount + (byte)(byMinGrp - 1); 0 < nMinionIdx;\n          nMinionIdx = nMinionIdx + -1) {\n        D2Game::Monster::Monster::Create::SpawnMonsterAtCoordList\n                  (pGame,pCoordList,pUnit,nClassId,Neutral,3,0);\n      }\n      return pUnit;\n    }\n    return (D2UnitStrc *)0x0;\n  }\n  return (D2UnitStrc *)0x0;\n}\n\n"
+  },
+  "00648b00": {
+    "name": "SetSP1Shifted",
+    "signature": "void SetSP1Shifted(D2DynamicPathStrc * pDynamicPath, int32_t nX, int32_t nY)",
+    "returnType": "void",
+    "callingConvention": "__stdcall",
+    "size": 43,
+    "namespace": "D2Common::PATH::DynamicPath",
+    "hasVarArgs": false,
+    "isThunk": false,
+    "isExternal": false,
+    "parameters": [
+      {
+        "name": "pDynamicPath",
+        "dataType": "D2DynamicPathStrc *",
+        "size": 4,
+        "ordinal": 0,
+        "storage": "Stack[0x4]:4",
+        "stackOffset": 4,
+        "resolvedType": null
+      },
+      {
+        "name": "nX",
+        "dataType": "int32_t",
+        "size": 4,
+        "ordinal": 1,
+        "storage": "Stack[0x8]:4",
+        "stackOffset": 8,
+        "resolvedType": null
+      },
+      {
+        "name": "nY",
+        "dataType": "int32_t",
+        "size": 4,
+        "ordinal": 2,
+        "storage": "Stack[0xc]:4",
+        "stackOffset": 12,
+        "resolvedType": null
+      }
+    ],
+    "localVariables": [],
+    "decompiled": "\n/* WARNING: Enum \"eCollisionFlags\": Some values do not have unique names */\n/* WARNING: Enum \"eD2TimerType\": Some values do not have unique names */\n/* WARNING: Enum \"eD2TimerTypeDWORD\": Some values do not have unique names */\n/* Diablo 2 1.14d reverse team\n   https://blizzhackers.dev\n           \n   @Date: 2022.08.24\n   @Author: dzik\n   @Function: SetSP1Shifted\n   @Address: Game.0x00648b00\n   @description:  */\n\nvoid D2Common::PATH::DynamicPath::SetSP1Shifted\n               (D2DynamicPathStrc *pDynamicPath,int32_t nX,int32_t nY)\n\n{\n  D2Common::Drlg::Drlg::Transform::DRLG_WorldToScreenNoShift(&nX,&nY);\n  pDynamicPath->nTargetX = (short)(nX >> 0xb);\n  pDynamicPath->nTargetY = (short)(nY >> 0xb);\n  return;\n}\n\n"
+  }
+}
